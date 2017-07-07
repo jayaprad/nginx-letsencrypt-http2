@@ -1,0 +1,79 @@
+nginx:
+  image: <nginx-image>
+  links:
+    - letsencrypt
+    - app
+    - phpmyadmin
+  environment:
+    - MY_DOMAIN_NAME=<App domain name>
+    - DB_DOMAIN_NAME=<DB domain name>
+    - DB_CONTAINER_NAME=PHPMYADMIN
+  mem_limit: 1g
+  cpu_shares: 256
+  ports:
+    - "80:80"
+    - "443:443"
+  volumes_from:
+    - letsencrypt
+letsencrypt:
+  image: quay.io/letsencrypt/letsencrypt:latest
+  command:  bash -c "sleep 6 && certbot certonly --standalone -d <App domain name> --text --agree-tos --email <email-address> --server https://acme-v01.api.letsencrypt.org/directory --rsa-key-size 4096 --verbose --renew-by-default --standalone-supported-challenges http-01"
+  entrypoint: ""
+  volumes:
+    - /etc/letsencrypt
+    - /var/lib/letsencrypt
+  ports:
+    - "80"
+    - "443"
+  environment:
+    - TERM=xterm
+
+app:
+  image: <app-image>
+  links:
+    - db:db
+  expose:
+    - 80
+  environment:
+    VIRTUAL_HOST: <App domain name>
+    NODE_ENV: local
+    DB_HOST: db
+    DB_NAME: <dbName>
+    DB_USER: <dbUsername>
+    DB_PASSWORD: <dbPassword>
+  volumes:
+    - .:/usr/src/app
+  working_dir: /usr/src/app
+  command: ['forever', '-v', '--minUptime', '300', 'server/server.js']
+
+npm:
+  image: node:6.11.0
+  volumes:
+    - $PWD:/data
+  working_dir: /data
+  entrypoint: ['npm']
+
+dbdata:
+  image: mysql:5.7
+  entrypoint: ["/bin/echo"]
+  command: ["Data-only container for db"]
+  volumes:
+    - /var/lib/mysql
+
+db:
+  image: mysql:5.7
+  volumes_from:
+    - dbdata
+  environment:
+    MYSQL_ROOT_PASSWORD: <Root password>
+    MYSQL_DATABASE: <DB name>
+    MYSQL_USER: <DB Username>
+    MYSQL_PASSWORD: <DB Password>
+
+phpmyadmin:
+  image: nazarpc/phpmyadmin
+  links:
+    - db:mysql
+  environment:
+    VIRTUAL_HOST: <DB domain name>
+    UPLOAD_SIZE: 1G
